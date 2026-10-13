@@ -1,7 +1,16 @@
 import { useState } from 'react';
-import type { Quest, Choice, GameEvent, GameStats, DecisionLog } from './types/game';
+import type { Quest, Choice, SceneChoice, GameEvent, GameStats, DecisionLog, InventoryItem } from './types/game';
 import { generateQuest, getRandomEvent } from './engine/questGenerator';
 import { ACHIEVEMENTS_LIST } from './engine/questTemplates';
+import { SYLLABUS_SCENES } from './engine/syllabusQuestData';
+import {
+  createInitialSyllabusState,
+  executeSceneChoice,
+  applyInventoryItem,
+  calculateSyllabusFinalStats,
+  getUnlockedAchievementsList,
+  type DeepQuestState,
+} from './engine/questEngine';
 import { sound } from './engine/sound';
 
 import { Navbar } from './components/Navbar';
@@ -11,14 +20,16 @@ import { QuestOverview } from './components/QuestOverview';
 import { StageEncounter } from './components/StageEncounter';
 import { FinalBossBattle } from './components/FinalBossBattle';
 import { QuestResult } from './components/QuestResult';
+import { InventoryDrawer } from './components/InventoryDrawer';
 
 type ScreenState = 'home' | 'quest_intro' | 'stage' | 'final_boss' | 'victory';
 
 export function App() {
   const [screen, setScreen] = useState<ScreenState>('home');
   const [quest, setQuest] = useState<Quest | null>(null);
+  const [deepQuestState, setDeepQuestState] = useState<DeepQuestState | null>(null);
   const [currentStageIdx, setCurrentStageIdx] = useState(0);
-  const [overthinking, setOverthinking] = useState(10);
+  const [overthinking, setOverthinking] = useState(15);
   const [absurdity, setAbsurdity] = useState(0);
   const [makeWorseClicks, setMakeWorseClicks] = useState(0);
   const [activeComplications, setActiveComplications] = useState<string[]>([]);
@@ -26,6 +37,7 @@ export function App() {
   const [decisionLogs, setDecisionLogs] = useState<DecisionLog[]>([]);
   const [unlockedAchievementIds, setUnlockedAchievementIds] = useState<Set<string>>(new Set());
   const [soundMuted, setSoundMuted] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const [demoInput, setDemoInput] = useState('');
 
   // Sound toggle
@@ -34,18 +46,32 @@ export function App() {
     setSoundMuted(isMuted);
   };
 
+  // Reduced motion toggle
+  const handleToggleReducedMotion = () => {
+    setReducedMotion((prev) => !prev);
+  };
+
   // Start new quest
   const handleStartQuest = (problemText: string) => {
     const newQuest = generateQuest(problemText);
     setQuest(newQuest);
     setCurrentStageIdx(0);
-    setOverthinking(10); // Baseline 10%
     setAbsurdity(0);
     setMakeWorseClicks(0);
     setActiveComplications([]);
     setRandomEvent(null);
     setDecisionLogs([]);
     setUnlockedAchievementIds(new Set());
+
+    if (newQuest.isDeepQuest) {
+      const initialState = createInitialSyllabusState();
+      setDeepQuestState(initialState);
+      setOverthinking(initialState.stats.overthinking);
+    } else {
+      setDeepQuestState(null);
+      setOverthinking(10);
+    }
+
     setScreen('quest_intro');
   };
 
@@ -59,6 +85,7 @@ export function App() {
   const handleResetToHome = () => {
     setScreen('home');
     setQuest(null);
+    setDeepQuestState(null);
     setDemoInput('');
   };
 
@@ -67,13 +94,47 @@ export function App() {
     setScreen('stage');
   };
 
+  // Active Scene for Deep Quest
+  const currentScene = deepQuestState
+    ? (SYLLABUS_SCENES[deepQuestState.currentSceneId] || SYLLABUS_SCENES['act1_spark'])
+    : undefined;
+
   // Handle choice selection in stage
-  const handleSelectChoice = (choice: Choice) => {
+  const handleSelectChoice = (choice: Choice | SceneChoice) => {
     if (!quest) return;
 
-    const currentStage = quest.stages[currentStageIdx];
-    const newOverthinking = Math.min(180, overthinking + choice.overthinkingDelta);
-    const newAbsurdity = absurdity + choice.absurdityDelta;
+    // 1. DEEP QUEST PATH ("The Unfinished Syllabus")
+    if (quest.isDeepQuest && deepQuestState && currentScene) {
+      const result = executeSceneChoice(currentScene, choice as SceneChoice, deepQuestState);
+      setDeepQuestState(result.nextState);
+      setOverthinking(result.nextState.stats.overthinking);
+      setDecisionLogs(result.nextState.decisionHistory);
+      setUnlockedAchievementIds(result.nextState.unlockedAchievementIds);
+
+      // Sound feedback
+      sound.playMeterUp();
+
+      // Check random event chance
+      if (Math.random() < 0.4 && !randomEvent && !result.reachedBoss) {
+        const ev = getRandomEvent(true);
+        setRandomEvent(ev);
+        sound.playEvent();
+      } else {
+        setRandomEvent(null);
+      }
+
+      if (result.reachedBoss) {
+        sound.playBossAppear();
+        setScreen('final_boss');
+      }
+      return;
+    }
+
+    // 2. LEGACY QUEST PATH
+    const currentStage = quest.stages[currentStageIdx] || quest.stages[0];
+    const delta = choice.statDeltas?.overthinking ?? choice.overthinkingDelta ?? 0;
+    const newOverthinking = Math.min(180, overthinking + delta);
+    const newAbsurdity = absurdity + (choice.absurdityDelta || 0);
 
     setOverthinking(newOverthinking);
     setAbsurdity(newAbsurdity);
@@ -83,11 +144,11 @@ export function App() {
       ...decisionLogs,
       {
         stageIndex: currentStageIdx + 1,
-        stageTitle: currentStage.title,
+        stageTitle: currentStage?.title || 'Unknown Stage',
         choiceTitle: choice.title,
         choiceType: choice.type,
         consequence: choice.consequence,
-        overthinkingDelta: choice.overthinkingDelta,
+        overthinkingDelta: delta,
       },
     ];
     setDecisionLogs(newLogs);
@@ -114,9 +175,9 @@ export function App() {
     // Sound feedback
     sound.playMeterUp();
 
-    // Check if random event should trigger (approx 45% chance on stages before the end)
+    // Check if random event should trigger
     if (currentStageIdx < quest.stages.length - 1 && Math.random() < 0.45 && !randomEvent) {
-      const ev = getRandomEvent();
+      const ev = getRandomEvent(false);
       setRandomEvent(ev);
       setOverthinking((prev) => Math.max(0, Math.min(180, prev + ev.overthinkingDelta)));
       sound.playEvent();
@@ -128,7 +189,7 @@ export function App() {
     if (currentStageIdx + 1 < quest.stages.length) {
       setCurrentStageIdx((prev) => prev + 1);
     } else {
-      // All stages completed -> Final Boss!
+      sound.playBossAppear();
       setScreen('final_boss');
     }
   };
@@ -136,15 +197,44 @@ export function App() {
   // Handle "MAKE IT WORSE" button
   const handleMakeItWorse = () => {
     if (!quest) return;
+
+    if (quest.isDeepQuest && deepQuestState) {
+      const newClicks = deepQuestState.makeWorseClicks + 1;
+      const compIdx = (newClicks - 1) % quest.makeWorsePool.length;
+      const complication = quest.makeWorsePool[compIdx];
+      const newComps = [complication, ...deepQuestState.activeComplications.slice(0, 3)];
+
+      const nextStats = {
+        ...deepQuestState.stats,
+        overthinking: Math.min(180, deepQuestState.stats.overthinking + 16),
+        doom: Math.min(100, deepQuestState.stats.doom + 14),
+        timeLostMinutes: deepQuestState.stats.timeLostMinutes + 12,
+      };
+
+      const updatedAch = new Set(deepQuestState.unlockedAchievementIds);
+      if (newClicks >= 3) {
+        updatedAch.add('escalation_architect');
+      }
+
+      setDeepQuestState({
+        ...deepQuestState,
+        makeWorseClicks: newClicks,
+        activeComplications: newComps,
+        stats: nextStats,
+        unlockedAchievementIds: updatedAch,
+      });
+      setOverthinking(nextStats.overthinking);
+      return;
+    }
+
+    // Legacy Make It Worse
     const newClicks = makeWorseClicks + 1;
     setMakeWorseClicks(newClicks);
 
-    // Draw complication
     const compIdx = (newClicks - 1) % quest.makeWorsePool.length;
     const complication = quest.makeWorsePool[compIdx];
     setActiveComplications((prev) => [complication, ...prev.slice(0, 3)]);
 
-    // Boost overthinking and absurdity
     const newOverthinking = Math.min(180, overthinking + 16);
     setOverthinking(newOverthinking);
     setAbsurdity((prev) => prev + 25);
@@ -159,16 +249,26 @@ export function App() {
     setUnlockedAchievementIds(updatedAchievements);
   };
 
+  // Handle using item from inventory satchel
+  const handleUseItem = (item: InventoryItem) => {
+    if (quest?.isDeepQuest && deepQuestState) {
+      const next = applyInventoryItem(item, deepQuestState);
+      setDeepQuestState(next);
+      setOverthinking(next.stats.overthinking);
+    }
+  };
+
   // Handle Final Boss Defeated
   const handleDefeatBoss = () => {
     const updatedAchievements = new Set(unlockedAchievementIds);
     updatedAchievements.add('main_character');
     updatedAchievements.add('could_have_done_it');
+    updatedAchievements.add('syllabus_slayer');
     setUnlockedAchievementIds(updatedAchievements);
     setScreen('victory');
   };
 
-  // Calculate final statistics
+  // Calculate final statistics for legacy runs
   const calculateFinalStats = (): GameStats => {
     const rationalDecisions = decisionLogs.filter((d) =>
       d.choiceTitle.toLowerCase().includes('just') ||
@@ -181,10 +281,8 @@ export function App() {
       d.choiceTitle.toLowerCase().includes('pick option a')
     ).length;
 
-    // Time wasted derived deterministically
     const baseMinutes = 24 + decisionLogs.length * 7 + makeWorseClicks * 6;
     const timeWastedMinutes = Math.min(120, Math.max(15, baseMinutes));
-
     const realityDistortion = Math.min(99, Math.max(25, 40 + absurdity / 3 + makeWorseClicks * 12));
     const confidence = Math.max(-45, Math.min(30, 20 - overthinking / 3));
     const productivity = Math.max(4, Math.min(25, Math.round(100 / (decisionLogs.length + makeWorseClicks + 3))));
@@ -192,22 +290,27 @@ export function App() {
     return {
       timeWastedMinutes: Math.round(timeWastedMinutes),
       overthinkingPercentage: Math.round(overthinking),
-      decisionsMade: decisionLogs.length + 1, // choices + final boss
-      rationalDecisions: rationalDecisions,
+      doomPercentage: Math.round(overthinking * 0.7),
+      resolvePercentage: Math.max(10, Math.round(confidence + 30)),
+      decisionsMade: decisionLogs.length + 1,
+      rationalDecisions,
       unnecessaryComplications: makeWorseClicks * 2 + decisionLogs.length * 3 + activeComplications.length,
       confidencePercent: Math.round(confidence),
       realityDistortionPercent: Math.round(realityDistortion),
       productivityPercent: productivity,
+      itemsUsedCount: 0,
     };
   };
 
-  // Unlocked achievements array
   const unlockedAchievementsList = ACHIEVEMENTS_LIST.filter((a) =>
     unlockedAchievementIds.has(a.id)
   );
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className={reducedMotion ? 'reduced-motion' : ''}
+      style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
+    >
       {/* Top Navbar */}
       <Navbar
         soundMuted={soundMuted}
@@ -215,6 +318,8 @@ export function App() {
         onDemoMode={handleDemoMode}
         onReset={handleResetToHome}
         isGameActive={screen !== 'home'}
+        reducedMotion={reducedMotion}
+        onToggleReducedMotion={handleToggleReducedMotion}
       />
 
       {/* Main Content Area */}
@@ -230,8 +335,11 @@ export function App() {
 
           {/* QUEST INTRO SCREEN */}
           {screen === 'quest_intro' && quest && (
-            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <OverthinkingMeter percentage={overthinking} />
+            <div style={{ maxWidth: '820px', margin: '0 auto' }}>
+              <OverthinkingMeter
+                percentage={overthinking}
+                stats={quest.isDeepQuest ? deepQuestState?.stats : undefined}
+              />
               <QuestOverview
                 quest={quest}
                 onBeginQuest={handleBeginStage}
@@ -240,22 +348,40 @@ export function App() {
             </div>
           )}
 
-          {/* ACTIVE STAGE SCREEN */}
+          {/* ACTIVE STAGE / SCENE SCREEN */}
           {screen === 'stage' && quest && (
-            <div style={{ maxWidth: '840px', margin: '0 auto' }}>
-              <OverthinkingMeter percentage={overthinking} />
-              
+            <div style={{ maxWidth: '850px', margin: '0 auto' }}>
+              <OverthinkingMeter
+                percentage={overthinking}
+                stats={quest.isDeepQuest ? deepQuestState?.stats : undefined}
+              />
+
               <QuestOverview
                 quest={quest}
                 isCollapsible={true}
               />
 
+              {/* Functional Inventory Satchel for deep quests */}
+              {quest.isDeepQuest && deepQuestState && (
+                <InventoryDrawer
+                  items={deepQuestState.inventory}
+                  onUseItem={handleUseItem}
+                />
+              )}
+
+              {/* Main Encounter (Scene or Stage) */}
               <StageEncounter
-                stage={quest.stages[currentStageIdx]}
-                totalStages={quest.stages.length}
+                scene={currentScene}
+                stage={quest.stages[currentStageIdx] || quest.stages[0]}
+                questState={deepQuestState || undefined}
+                totalStages={quest.stages.length || 8}
                 onSelectChoice={handleSelectChoice}
                 onMakeItWorse={handleMakeItWorse}
-                activeComplications={activeComplications}
+                activeComplications={
+                  quest.isDeepQuest && deepQuestState
+                    ? deepQuestState.activeComplications
+                    : activeComplications
+                }
                 randomEvent={randomEvent}
                 onDismissEvent={() => setRandomEvent(null)}
               />
@@ -264,10 +390,19 @@ export function App() {
 
           {/* FINAL BOSS SCREEN */}
           {screen === 'final_boss' && quest && (
-            <div style={{ maxWidth: '780px', margin: '0 auto' }}>
-              <OverthinkingMeter percentage={Math.max(100, overthinking)} />
+            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+              <OverthinkingMeter
+                percentage={Math.max(100, overthinking)}
+                stats={quest.isDeepQuest ? deepQuestState?.stats : undefined}
+              />
               <FinalBossBattle
                 boss={quest.finalBoss}
+                isDeepQuest={quest.isDeepQuest}
+                questState={deepQuestState || undefined}
+                onUpdateState={(next) => {
+                  setDeepQuestState(next);
+                  setOverthinking(next.stats.overthinking);
+                }}
                 onDefeatBoss={handleDefeatBoss}
               />
             </div>
@@ -275,11 +410,21 @@ export function App() {
 
           {/* VICTORY / RESULTS SCREEN */}
           {screen === 'victory' && quest && (
-            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ maxWidth: '820px', margin: '0 auto' }}>
               <QuestResult
                 quest={quest}
-                stats={calculateFinalStats()}
-                achievements={unlockedAchievementsList}
+                stats={
+                  quest.isDeepQuest && deepQuestState
+                    ? calculateSyllabusFinalStats(deepQuestState)
+                    : calculateFinalStats()
+                }
+                achievements={
+                  quest.isDeepQuest && deepQuestState
+                    ? getUnlockedAchievementsList(deepQuestState.unlockedAchievementIds)
+                    : unlockedAchievementsList
+                }
+                endingDefinition={deepQuestState?.evaluatedEnding}
+                decisionLogs={deepQuestState?.decisionHistory || decisionLogs}
                 onPlayAgain={handleResetToHome}
               />
             </div>
@@ -296,7 +441,7 @@ export function App() {
         color: '#64748b',
       }}>
         <div className="container">
-          <span>🧠 OVERTHINKING RPG</span> &bull; <span>Built for the Crazy-App Concept Contest</span> &bull; <span>"You could have just done it."</span>
+          <span>🧠 OVERTHINKING RPG</span> &bull; <span>The Unfinished Syllabus Edition</span> &bull; <span>"You could have just done it."</span>
         </div>
       </footer>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sword, AlertCircle, Sparkles } from 'lucide-react';
+import { Sword, AlertCircle, Sparkles, BookOpen } from 'lucide-react';
 import { sound } from '../engine/sound';
 
 interface HomeHeroProps {
@@ -8,25 +8,28 @@ interface HomeHeroProps {
 }
 
 const PLACEHOLDERS = [
-  'I need to email my professor...',
-  'I should start studying...',
-  'I need to reply to someone...',
-  'I have to clean my room...',
-  'I need to call someone...',
+  'I need to write an email to my professor...',
+  'I need to reply to a message...',
+  'I have an exam tomorrow...',
+  'I need to make an important phone call...',
+  'I need to clean my room...',
+  'I need to choose between two options...',
+  'I have been procrastinating on a project...',
   'I should probably go to sleep...',
-  'I have an assignment due tomorrow...',
 ];
 
 const PRESET_EXAMPLES = [
-  'I need to email my professor.',
-  'I should start studying.',
+  'I need to write an email to my professor.',
   'I need to reply to a message.',
-  'I have an assignment due tomorrow.',
+  'I have an exam tomorrow.',
+  'I need to make an important phone call.',
   'I need to clean my room.',
+  'I need to choose between two options.',
+  'I have been procrastinating on a project.',
 ];
 
 export const HomeHero: React.FC<HomeHeroProps> = ({ onStartQuest, initialValue = '' }) => {
-  const [inputValue, setInputValue] = useState(initialValue);
+  const [inputValue, setInputValue] = useState(() => initialValue);
   const [errorMsg, setErrorMsg] = useState('');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
 
@@ -37,12 +40,6 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onStartQuest, initialValue =
     }, 2800);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (initialValue) {
-      setInputValue(initialValue);
-    }
-  }, [initialValue]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -57,6 +54,11 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onStartQuest, initialValue =
     onStartQuest(trimmed);
   };
 
+  const handleLaunchSyllabusCampaign = () => {
+    sound.playQuestStart();
+    onStartQuest('The Unfinished Syllabus');
+  };
+
   const handleSelectExample = (text: string) => {
     sound.playClick();
     setInputValue(text);
@@ -65,173 +67,251 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onStartQuest, initialValue =
 
   return (
     <div style={{
-      padding: '3rem 0 4rem',
+      padding: '2rem 0 3.5rem',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       textAlign: 'center',
     }}>
-      {/* Small top banner */}
+      {/* Top Tagline Badge */}
       <div className="rpg-badge badge-gold" style={{ marginBottom: '1.25rem' }}>
         <Sparkles size={13} />
-        <span>CONTEST PROTOTYPE EDITION</span>
+        <span>SATIRICAL PSYCHOLOGICAL RPG &bull; CLIENT-SIDE &bull; FREEFORM QUESTS</span>
       </div>
 
       {/* Main Title */}
       <h1 className="font-rpg" style={{
-        fontSize: 'clamp(2.5rem, 6vw, 4.2rem)',
+        fontSize: 'clamp(2.4rem, 5.5vw, 3.8rem)',
         fontWeight: 900,
         lineHeight: 1.1,
-        marginBottom: '0.85rem',
-        textShadow: '0 2px 20px rgba(245, 158, 11, 0.3)',
+        marginBottom: '0.5rem',
+        textShadow: '0 2px 25px rgba(245, 158, 11, 0.35)',
       }}>
         🧠 OVERTHINKING RPG
       </h1>
 
-      {/* Subtitle */}
+      {/* Brand Subtitle */}
       <p style={{
-        fontSize: 'clamp(1.15rem, 2.5vw, 1.45rem)',
+        fontSize: 'clamp(1.1rem, 2.2vw, 1.35rem)',
         color: '#f8fafc',
         fontWeight: 600,
-        maxWidth: '650px',
-        margin: '0 auto 0.6rem',
+        maxWidth: '680px',
+        margin: '0 auto 1.5rem',
         letterSpacing: '0.01em',
       }}>
-        Turn a tiny problem into an unnecessarily epic quest.
+        Turn your tiniest problems into unnecessarily epic quests.
       </p>
 
-      {/* Supporting text */}
-      <p style={{
-        fontSize: '1rem',
-        color: 'var(--text-muted)',
-        marginBottom: '2rem',
+      {/* THE CORE QUESTION */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(22, 28, 44, 0.9), rgba(15, 23, 42, 0.95))',
+        border: '1px solid rgba(212, 175, 55, 0.4)',
+        borderRadius: '16px',
+        padding: '2rem 1.75rem',
+        maxWidth: '720px',
+        width: '100%',
+        boxShadow: '0 12px 35px -10px rgba(0, 0, 0, 0.7), 0 0 25px rgba(234, 179, 8, 0.12)',
+        marginBottom: '2.5rem',
       }}>
-        Tell us what's bothering you.
-      </p>
-
-      {/* Input Form */}
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          width: '100%',
-          maxWidth: '680px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1rem',
-        }}
-      >
-        <div style={{
-          width: '100%',
-          position: 'relative',
+        <h2 className="font-rpg" style={{
+          fontSize: 'clamp(1.35rem, 3.2vw, 1.85rem)',
+          fontWeight: 800,
+          color: '#fef08a',
+          margin: '0 0 0.5rem',
+          lineHeight: 1.25,
         }}>
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              if (errorMsg) setErrorMsg('');
-            }}
-            placeholder={PLACEHOLDERS[placeholderIndex]}
-            maxLength={160}
-            style={{
-              width: '100%',
-              padding: '1.2rem 1.4rem',
-              fontSize: '1.15rem',
-              color: '#ffffff',
-              background: 'rgba(18, 22, 34, 0.9)',
-              border: errorMsg ? '2px solid #ef4444' : '2px solid rgba(212, 175, 55, 0.45)',
-              borderRadius: '12px',
-              outline: 'none',
-              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(0, 0, 0, 0.4)',
-              transition: 'border-color 0.2s, box-shadow 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = '#facc15';
-              e.target.style.boxShadow = '0 0 20px rgba(250, 204, 21, 0.35)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = errorMsg ? '#ef4444' : 'rgba(212, 175, 55, 0.45)';
-              e.target.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.6)';
-            }}
-          />
+          What tiny problem is currently ruining your entire existence?
+        </h2>
 
-          {errorMsg && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.4rem',
-              color: '#f87171',
-              fontSize: '0.9rem',
-              marginTop: '0.5rem',
-              fontWeight: 500,
-            }}>
-              <AlertCircle size={15} />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-        </div>
+        <p style={{
+          fontSize: '0.92rem',
+          color: 'var(--text-muted)',
+          marginBottom: '1.5rem',
+          maxWidth: '560px',
+          marginLeft: 'auto',
+          marginRight: 'auto',
+        }}>
+          Describe any everyday dilemma—from writing a short email to washing a dish—and embark on an over-analyzed multi-stage psychological adventure.
+        </p>
 
-        {/* Big Quest CTA Button */}
-        <button
-          type="submit"
-          className="btn-primary"
+        {/* Custom Input Form */}
+        <form
+          onSubmit={handleSubmit}
           style={{
             width: '100%',
-            maxWidth: '380px',
-            padding: '1.1rem 2rem',
-            fontSize: '1.25rem',
-            letterSpacing: '0.03em',
-            marginTop: '0.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem',
           }}
         >
-          <Sword size={22} />
-          <span>⚔️ TURN IT INTO A QUEST</span>
-        </button>
-      </form>
+          <div style={{ width: '100%', position: 'relative' }}>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                if (errorMsg) setErrorMsg('');
+              }}
+              placeholder={PLACEHOLDERS[placeholderIndex]}
+              maxLength={160}
+              style={{
+                width: '100%',
+                padding: '1.15rem 1.35rem',
+                fontSize: '1.1rem',
+                color: '#ffffff',
+                background: 'rgba(10, 14, 24, 0.95)',
+                border: errorMsg ? '2px solid #ef4444' : '2px solid rgba(212, 175, 55, 0.45)',
+                borderRadius: '10px',
+                outline: 'none',
+                boxShadow: '0 6px 25px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(0, 0, 0, 0.4)',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#facc15';
+                e.target.style.boxShadow = '0 0 20px rgba(234, 179, 8, 0.35)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = errorMsg ? '#ef4444' : 'rgba(212, 175, 55, 0.45)';
+                e.target.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.5)';
+              }}
+            />
 
-      {/* Preset Examples Section */}
+            {errorMsg && (
+              <div style={{
+                position: 'absolute',
+                bottom: '-1.5rem',
+                left: '0.5rem',
+                fontSize: '0.8rem',
+                color: '#f87171',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+              }}>
+                <AlertCircle size={13} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="btn-primary"
+            style={{
+              width: '100%',
+              maxWidth: '360px',
+              padding: '0.95rem 1.8rem',
+              fontSize: '1.1rem',
+              marginTop: '0.25rem',
+            }}
+          >
+            <Sword size={20} />
+            <span>START QUEST</span>
+          </button>
+        </form>
+
+        {/* Preset scenario chips */}
+        <div style={{ marginTop: '1.75rem', textAlign: 'center' }}>
+          <div style={{
+            fontSize: '0.78rem',
+            color: '#94a3b8',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            marginBottom: '0.65rem',
+            fontWeight: 700,
+          }}>
+            Or select an everyday dilemma preset:
+          </div>
+
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.45rem',
+            justifyContent: 'center',
+          }}>
+            {PRESET_EXAMPLES.map((example, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelectExample(example)}
+                className="btn-secondary"
+                style={{
+                  fontSize: '0.82rem',
+                  padding: '0.4rem 0.8rem',
+                }}
+              >
+                "{example}"
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* DISCOVER AUTHORED CAMPAIGNS SHELF */}
       <div style={{
-        marginTop: '2.5rem',
+        maxWidth: '720px',
         width: '100%',
-        maxWidth: '700px',
+        textAlign: 'left',
       }}>
         <div style={{
-          fontSize: '0.88rem',
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
           marginBottom: '0.85rem',
+          color: '#cbd5e1',
+          fontSize: '0.88rem',
+          fontWeight: 700,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
         }}>
-          Too lazy to think of a problem?
+          <BookOpen size={16} color="#facc15" />
+          <span>Authored Campaign Vault</span>
         </div>
 
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '0.6rem',
-          justifyContent: 'center',
-        }}>
-          {PRESET_EXAMPLES.map((example) => (
-            <button
-              key={example}
-              type="button"
-              onClick={() => handleSelectExample(example)}
-              className="btn-secondary"
-              style={{
-                fontSize: '0.88rem',
-                borderRadius: '20px',
-                padding: '0.45rem 0.95rem',
-                border: inputValue === example ? '1px solid #facc15' : undefined,
-                background: inputValue === example ? 'rgba(234, 179, 8, 0.15)' : undefined,
-                color: inputValue === example ? '#facc15' : undefined,
-              }}
-            >
-              <span>{example}</span>
-            </button>
-          ))}
+        <div
+          className="rpg-card"
+          style={{
+            background: 'rgba(18, 22, 34, 0.75)',
+            border: '1px solid rgba(234, 179, 8, 0.35)',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <div style={{ flex: '1 1 340px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <span style={{ fontSize: '1.4rem' }}>📚</span>
+              <h3 className="font-rpg" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0 }}>
+                The Unfinished Syllabus
+              </h3>
+              <span className="rpg-badge badge-gold font-mono" style={{ fontSize: '0.7rem' }}>
+                3 Acts
+              </span>
+            </div>
+            <p style={{ fontSize: '0.86rem', color: '#cbd5e1', margin: 0, lineHeight: 1.45 }}>
+              Handcrafted 3-act academic campaign with 10–12 branching decisions, custom items, and a 3-phase confrontation against The Guardian of the Unfinished Syllabus.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLaunchSyllabusCampaign}
+            className="btn-secondary"
+            style={{
+              padding: '0.65rem 1.2rem',
+              fontSize: '0.88rem',
+              fontWeight: 700,
+              borderColor: 'rgba(234, 179, 8, 0.5)',
+              color: '#fef08a',
+              background: 'rgba(234, 179, 8, 0.12)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span>Play Authored Campaign &rarr;</span>
+          </button>
         </div>
       </div>
     </div>

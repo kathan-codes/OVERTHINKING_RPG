@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import type { Stage, Choice, GameEvent } from '../types/game';
-import { Flame, Sparkles, ArrowRight } from 'lucide-react';
+import type { Stage, Choice, Scene, SceneChoice, GameEvent } from '../types/game';
+import type { DeepQuestState } from '../engine/questEngine';
+import { isChoiceAvailable } from '../engine/questEngine';
+import { Flame, Sparkles, Lock, MapPin, Compass, AlertTriangle } from 'lucide-react';
 import { sound } from '../engine/sound';
 
 interface StageEncounterProps {
-  stage: Stage;
-  totalStages: number;
-  onSelectChoice: (choice: Choice) => void;
+  stage?: Stage;
+  scene?: Scene;
+  questState?: DeepQuestState;
+  totalStages?: number;
+  onSelectChoice: (choice: Choice | SceneChoice) => void;
   onMakeItWorse: () => void;
   activeComplications: string[];
   randomEvent: GameEvent | null;
@@ -15,23 +19,42 @@ interface StageEncounterProps {
 
 export const StageEncounter: React.FC<StageEncounterProps> = ({
   stage,
-  totalStages,
+  scene,
+  questState,
+  totalStages = 3,
   onSelectChoice,
   onMakeItWorse,
   activeComplications,
   randomEvent,
   onDismissEvent,
 }) => {
-  const [selectedChoice, setSelectedChoice] = useState<Choice | null>(null);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
 
-  const handleChoiceClick = (choice: Choice) => {
+  // If scene is provided, use scene; otherwise fallback to stage
+  const title = scene?.title || stage?.title || 'Unknown Encounter';
+  const scenario = scene?.scenario || stage?.scenario || '';
+  const dilemma = scene?.dilemma || stage?.dilemma || '';
+  const actTitle = scene?.actTitle || `STAGE ${stage?.stageNumber || 1} OF ${totalStages}`;
+  const location = scene?.location || 'The Psychological Battleground';
+  const narratorObservation = scene?.narratorObservation;
+  const choices = scene?.choices || stage?.choices || [];
+
+  const handleChoiceClick = (choice: Choice | SceneChoice) => {
+    // If scene choice with conditions, validate availability
+    if (scene && questState) {
+      const check = isChoiceAvailable(choice as SceneChoice, questState);
+      if (!check.available) {
+        sound.playDoomAlarm();
+        setBlockedReason(check.reason || 'This action is locked by unmet conditions.');
+        return;
+      }
+    }
+
     sound.playChoice();
-    setSelectedChoice(choice);
-    // Allow player to read the consequence briefly before advancing
-    setTimeout(() => {
-      onSelectChoice(choice);
-      setSelectedChoice(null);
-    }, 850);
+    setBlockedReason(null);
+
+    // Execute state update immediately
+    onSelectChoice(choice);
   };
 
   const getChoiceBadge = (type: Choice['type']) => {
@@ -43,9 +66,13 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
       case 'ESCAPE':
         return <span className="rpg-badge badge-purple font-mono">🧙 ESCAPE</span>;
       case 'ULTIMATE':
-        return <span className="rpg-badge badge-danger font-mono">💀 ULTIMATE MOVE</span>;
+        return <span className="rpg-badge badge-danger font-mono">💀 ULTIMATE</span>;
       case 'CHAOTIC':
-        return <span className="rpg-badge badge-danger font-mono">🌀 CHAOTIC MOVE</span>;
+        return <span className="rpg-badge badge-danger font-mono">🌀 CHAOTIC</span>;
+      case 'DECISIVE':
+        return <span className="rpg-badge badge-gold font-mono">⚡ DECISIVE</span>;
+      case 'PREPARE':
+        return <span className="rpg-badge badge-purple font-mono">📜 PREPARE</span>;
       default:
         return <span className="rpg-badge badge-gold font-mono">ACTION</span>;
     }
@@ -90,7 +117,7 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
         </div>
       )}
 
-      {/* Stage Header */}
+      {/* Stage Header with Act Banner and Location */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -99,8 +126,22 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
         gap: '0.5rem',
         marginBottom: '0.85rem',
       }}>
-        <div className="rpg-badge badge-gold font-mono">
-          STAGE {stage.stageNumber} OF {totalStages}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="rpg-badge badge-gold font-mono">
+            <Compass size={13} />
+            <span>{actTitle}</span>
+          </div>
+          {scene && (
+            <div className="rpg-badge font-mono" style={{
+              background: 'rgba(148, 163, 184, 0.15)',
+              color: '#cbd5e1',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              fontSize: '0.75rem',
+            }}>
+              <MapPin size={12} color="#38bdf8" />
+              <span>{location}</span>
+            </div>
+          )}
         </div>
 
         {/* MAKE IT WORSE BUTTON */}
@@ -117,23 +158,25 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
         </button>
       </div>
 
-      {/* Stage Title & Scenario */}
+      {/* Stage Title */}
       <h3 className="font-rpg" style={{
-        fontSize: '1.45rem',
+        fontSize: 'clamp(1.4rem, 4vw, 1.85rem)',
         fontWeight: 800,
         color: '#ffffff',
-        marginBottom: '0.5rem',
+        marginBottom: '0.65rem',
+        lineHeight: 1.25,
       }}>
-        {stage.title}
+        {title}
       </h3>
 
+      {/* Scenario Narrative */}
       <p style={{
         fontSize: '1rem',
         color: '#e2e8f0',
-        marginBottom: '0.75rem',
-        lineHeight: 1.5,
+        marginBottom: '0.85rem',
+        lineHeight: 1.55,
       }}>
-        {stage.scenario}
+        {scenario}
       </p>
 
       {/* Dilemma Box */}
@@ -142,10 +185,10 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
         borderLeft: '4px solid #facc15',
         padding: '0.75rem 1rem',
         borderRadius: '0 8px 8px 0',
-        marginBottom: '1.25rem',
+        marginBottom: narratorObservation ? '0.75rem' : '1.25rem',
       }}>
         <div style={{
-          fontSize: '0.78rem',
+          fontSize: '0.75rem',
           fontWeight: 700,
           color: 'var(--text-gold)',
           textTransform: 'uppercase',
@@ -155,11 +198,27 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
           Psychological Dilemma
         </div>
         <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc' }}>
-          {stage.dilemma}
+          {dilemma}
         </div>
       </div>
 
-      {/* Active Escalated Complications list (from "MAKE IT WORSE") */}
+      {/* Cynical Narrator Observation if present */}
+      {narratorObservation && (
+        <div style={{
+          fontSize: '0.86rem',
+          color: '#94a3b8',
+          fontStyle: 'italic',
+          marginBottom: '1.25rem',
+          padding: '0.4rem 0.75rem',
+          borderLeft: '2px solid rgba(168, 85, 247, 0.4)',
+          background: 'rgba(168, 85, 247, 0.05)',
+          borderRadius: '0 6px 6px 0',
+        }}>
+          💬 <strong>Narrator:</strong> "{narratorObservation}"
+        </div>
+      )}
+
+      {/* Active Escalated Complications list */}
       {activeComplications.length > 0 && (
         <div style={{
           background: 'rgba(239, 68, 68, 0.1)',
@@ -190,9 +249,37 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
         </div>
       )}
 
+      {/* Locked Action Notification Banner if user clicked a blocked choice */}
+      {blockedReason && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid #ef4444',
+          borderRadius: '8px',
+          padding: '0.75rem 1rem',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          textAlign: 'left',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fca5a5', fontSize: '0.85rem' }}>
+            <AlertTriangle size={18} color="#ef4444" />
+            <span><strong>Choice Locked:</strong> {blockedReason}</span>
+          </div>
+          <button
+            onClick={() => setBlockedReason(null)}
+            className="btn-secondary"
+            style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Choices Header */}
       <div style={{
-        fontSize: '0.9rem',
+        fontSize: '0.88rem',
         fontWeight: 700,
         color: 'var(--text-gold)',
         textTransform: 'uppercase',
@@ -206,25 +293,58 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
         <span>WHAT WILL YOU DO?</span>
       </div>
 
-      {/* Choices Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: '0.85rem',
-      }}>
-        {stage.choices.map((choice) => {
-          const isSelected = selectedChoice?.id === choice.id;
+      {/* Choices Grid or Diagnostic Empty State */}
+      {choices.length === 0 ? (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid #ef4444',
+          borderRadius: '8px',
+          padding: '1.25rem',
+          color: '#fecaca',
+          textAlign: 'center',
+          marginBottom: '1rem',
+        }}>
+          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f87171', marginBottom: '0.35rem' }}>
+            ⚠️ ENCOUNTER DATA DIAGNOSTIC: NO CHOICES AVAILABLE
+          </div>
+          <div style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>
+            Encounter: <strong>{title}</strong> &bull; Location: {location} &bull; Scene ID: {scene?.id || 'none'}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+            The current encounter data is missing choice definitions.
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '0.85rem',
+        }}>
+        {choices.map((choice) => {
+          // Check condition if scene choice
+          let isAvailable = true;
+          let lockReason = '';
+          if (scene && questState) {
+            const availCheck = isChoiceAvailable(choice as SceneChoice, questState);
+            isAvailable = availCheck.available;
+            lockReason = availCheck.reason || '';
+          }
+
+          const deltas = choice.statDeltas;
+
           return (
             <div
               key={choice.id}
               onClick={() => handleChoiceClick(choice)}
               className="choice-card"
               style={{
-                borderColor: isSelected ? '#facc15' : undefined,
-                background: isSelected ? 'rgba(234, 179, 8, 0.2)' : undefined,
-                cursor: selectedChoice ? 'default' : 'pointer',
+                borderColor: !isAvailable ? 'rgba(148, 163, 184, 0.15)' : undefined,
+                background: !isAvailable ? 'rgba(15, 23, 42, 0.5)' : undefined,
+                cursor: !isAvailable ? 'not-allowed' : 'pointer',
+                opacity: !isAvailable ? 0.6 : 1,
               }}
             >
+              {/* Card Header */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -235,15 +355,43 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
                   <span style={{ fontSize: '1.25rem' }}>{choice.icon}</span>
                   {getChoiceBadge(choice.type)}
                 </div>
-                <span className="font-mono" style={{
-                  fontSize: '0.78rem',
-                  color: choice.overthinkingDelta > 30 ? '#f87171' : choice.overthinkingDelta > 15 ? '#fbbf24' : '#34d399',
-                  fontWeight: 700,
-                }}>
-                  +{choice.overthinkingDelta}% Overthinking
-                </span>
+
+                {/* Stat Deltas / Lock Badge */}
+                {!isAvailable ? (
+                  <span
+                    className="rpg-badge font-mono"
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      color: '#f87171',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      fontSize: '0.72rem',
+                    }}
+                  >
+                    <Lock size={11} />
+                    <span>LOCKED</span>
+                  </span>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    {deltas?.resolve && (
+                      <span className="font-mono" style={{ fontSize: '0.74rem', color: '#38bdf8', fontWeight: 700 }}>
+                        {deltas.resolve > 0 ? `+${deltas.resolve}` : deltas.resolve}% Res
+                      </span>
+                    )}
+                    {deltas?.doom && (
+                      <span className="font-mono" style={{ fontSize: '0.74rem', color: '#f87171', fontWeight: 700 }}>
+                        {deltas.doom > 0 ? `+${deltas.doom}` : deltas.doom}% Doom
+                      </span>
+                    )}
+                    {deltas?.timeLostMinutes && (
+                      <span className="font-mono" style={{ fontSize: '0.74rem', color: '#facc15', fontWeight: 700 }}>
+                        +{deltas.timeLostMinutes}m
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
+              {/* Title & Subtitle */}
               <div style={{ fontWeight: 700, fontSize: '0.98rem', color: '#ffffff', marginBottom: '0.25rem' }}>
                 {choice.title}
               </div>
@@ -256,29 +404,25 @@ export const StageEncounter: React.FC<StageEncounterProps> = ({
                 {choice.description}
               </div>
 
-              {/* Consequence Flash on click */}
-              {isSelected && (
+              {/* Lock Reason if disabled */}
+              {!isAvailable && lockReason && (
                 <div style={{
-                  marginTop: '0.75rem',
-                  padding: '0.5rem 0.65rem',
-                  borderRadius: '6px',
-                  background: 'rgba(0, 0, 0, 0.6)',
-                  border: '1px solid #facc15',
-                  color: '#fef08a',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
+                  marginTop: '0.65rem',
+                  fontSize: '0.76rem',
+                  color: '#fca5a5',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.4rem',
+                  gap: '0.35rem',
                 }}>
-                  <ArrowRight size={14} />
-                  <span>{choice.consequence}</span>
+                  <Lock size={12} />
+                  <span>{lockReason}</span>
                 </div>
               )}
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
