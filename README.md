@@ -2,6 +2,10 @@
 
 > **Turn your tiniest problems into unnecessarily epic quests.**
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://overthinking-rpg.onrender.com/)
+
+🔗 **Live Demo:** [https://overthinking-rpg.onrender.com/](https://overthinking-rpg.onrender.com/)
+
 Built for the **Crazy-App Concept Contest**.
 
 ---
@@ -68,21 +72,28 @@ Built for the **Crazy-App Concept Contest**.
 
 ---
 
-## 🌐 1-Click Deployment Options
+## 🌐 Deployment & Live Hosting
 
-The production build is in `./dist`. You can deploy it to any static host in seconds:
+- 🚀 **Production (Render):** [https://overthinking-rpg.onrender.com/](https://overthinking-rpg.onrender.com/)
 
-### Option A: Vercel
+The production build is in `./dist`. To deploy elsewhere or locally:
+
+### Option A: Render (Static Site)
+- **Build Command:** `npm run build`
+- **Publish Directory:** `dist`
+- **Node Version:** `20` or higher
+
+### Option B: Vercel
 ```bash
 npx vercel ./dist --prod
 ```
 
-### Option B: Netlify
+### Option C: Netlify
 ```bash
 npx netlify deploy --dir=dist --prod
 ```
 
-### Option C: Surge
+### Option D: Surge
 ```bash
 npx surge ./dist --domain overthinking-rpg.surge.sh
 ```
